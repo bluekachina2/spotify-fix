@@ -1,0 +1,34 @@
+name: Build Zygisk module
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch zygisk.hpp (API v5, from topjohnwu/zygisk-module-sample)
+        run: curl -fsSL -o jni/zygisk.hpp https://raw.githubusercontent.com/topjohnwu/zygisk-module-sample/master/module/jni/zygisk.hpp
+
+      - name: Setup Android NDK
+        id: setup-ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r26d
+          add-to-path: false
+
+      - name: Build
+        env:
+          ANDROID_NDK: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Upload built module zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: aaudiocapturefix-zip
+          path: aaudiocapturefix-v0.2.zip
