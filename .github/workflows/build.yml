@@ -10,8 +10,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch zygisk.hpp (API v5, from topjohnwu/zygisk-module-sample)
-        run: curl -fsSL -o jni/zygisk.hpp https://raw.githubusercontent.com/topjohnwu/zygisk-module-sample/master/module/jni/zygisk.hpp
+      - name: Fetch zygisk.hpp (from topjohnwu/zygisk-module-sample)
+        run: |
+          mkdir -p jni
+          curl -fsSL -o jni/zygisk.hpp https://raw.githubusercontent.com/topjohnwu/zygisk-module-sample/master/module/jni/zygisk.hpp
 
       - name: Setup Android NDK
         id: setup-ndk
@@ -31,4 +33,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: aaudiocapturefix-zip
-          path: aaudiocapturefix-v0.2.zip
+          path: aaudiocapturefix-*.zip
+          if-no-files-found: error
