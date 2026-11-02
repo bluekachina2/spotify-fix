@@ -1,14 +1,35 @@
-#!/bin/sh
-# usage: ANDROID_NDK=/path/to/ndk ./build.sh [inline]
-set -e
-cd "$(dirname "$0")"
-[ -f jni/zygisk.hpp ] || { echo "put zygisk.hpp (Zygisk API v4) in jni/ first"; exit 1; }
-INL=OFF; [ "$1" = inline ] && INL=ON
-cmake -B build -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK/build/cmake/android.toolchain.cmake" \
-  -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-29 -DANDROID_STL=c++_static \
-  -DCMAKE_BUILD_TYPE=Release -DUSE_INLINE_HOOK=$INL
-cmake --build build
-rm -rf out && mkdir -p out/zygisk && cp -r template/* out/
-cp build/libaaudiocapturefix.so out/zygisk/arm64-v8a.so
-(cd out && zip -r ../aaudiocapturefix-v0.2.zip .)
-echo "built aaudiocapturefix-v0.2.zip"
+#!/usr/bin/env bash
+# Builds the Zygisk module and packs the Magisk zip.
+# Expects ANDROID_NDK (NDK root) in the environment and jni/zygisk.hpp present.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+cd "$ROOT"
+
+VERSION="v0.3"
+: "${ANDROID_NDK:?ANDROID_NDK is not set}"
+CXX="${CXX:-$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++}"
+
+[ -f jni/zygisk.hpp ] || { echo "jni/zygisk.hpp is missing"; exit 1; }
+[ -f jni/aaudiocapturefix.cpp ] || { echo "jni/aaudiocapturefix.cpp is missing"; exit 1; }
+
+STAGE="$ROOT/build/module"
+rm -rf "$ROOT/build"
+mkdir -p "$STAGE/zygisk"
+cp -r module/. "$STAGE/"
+
+"$CXX" -std=c++17 -O2 -fPIC -shared -Wall -Wextra \
+  -fno-exceptions -fno-rtti -static-libstdc++ \
+  -Wl,-z,max-page-size=16384 -Wl,--build-id=none -s \
+  -I jni jni/aaudiocapturefix.cpp \
+  -o "$STAGE/zygisk/arm64-v8a.so" \
+  -llog -ldl
+
+sed -i "s/^version=.*/version=$VERSION/" "$STAGE/module.prop"
+
+ZIP="$ROOT/aaudiocapturefix-$VERSION.zip"
+rm -f "$ZIP"
+( cd "$STAGE" && zip -r9X "$ZIP" META-INF zygisk module.prop )
+
+echo "Built $ZIP"
+unzip -l "$ZIP"
