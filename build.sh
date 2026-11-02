@@ -6,7 +6,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
 
-VERSION="v0.3"
+VERSION="v0.4"
 : "${ANDROID_NDK:?ANDROID_NDK is not set}"
 CXX="${CXX:-$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++}"
 

@@ -1,6 +1,6 @@
 id=aaudiocapturefix
 name=Spotify AAudio Capture Fix
-version=v0.3
-versionCode=3
+version=v0.4
+versionCode=4
 author=you
 description=Zygisk experiment: forces Spotify's AAudio streams onto the shared power-saving path so screen recorders can capture them. Mode file: mode (11/10/12, 0 = log only).

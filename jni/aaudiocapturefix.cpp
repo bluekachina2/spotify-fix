@@ -1,4 +1,4 @@
-// aaudiocapturefix v0.3 - Zygisk module (arm64-v8a)
+// aaudiocapturefix v0.4 - Zygisk module (arm64-v8a)
 //
 // Experiment: make Spotify's AAudio output streams use the normal shared,
 // power-saving (deep buffer) path instead of whatever it asks for, to see if
@@ -12,7 +12,8 @@
 //      linking) then resolves to our code. We keep the original addresses.
 //
 // Hooked: AAudioStreamBuilder_setPerformanceMode / _setSharingMode / _openStream
-// Not touched: capture policy (your dumps show Spotify does not set one).
+// and _setAllowedCapturePolicy. Logs showed Spotify requests capturePolicy=2
+// (ALLOW_CAPTURE_BY_SYSTEM), which blocks screen recorders, so we force 1 (ALL).
 //
 // Runtime setting (no rebuild needed): put a number in
 //   /data/adb/modules/aaudiocapturefix/mode
@@ -50,6 +51,7 @@ constexpr const char *kTargetPackage = "com.spotify.music";
 constexpr int32_t kPerfNone = 10;
 constexpr int32_t kPerfPowerSaving = 11;
 constexpr int32_t kSharingShared = 1;
+constexpr int32_t kCaptureAll = 1;  // AAUDIO_ALLOW_CAPTURE_BY_ALL
 
 int32_t g_forced_perf = kPerfPowerSaving;  // 0 = observe only
 
@@ -59,6 +61,7 @@ typedef int32_t (*GetFn)(void *stream);
 
 SetModeFn g_real_set_perf = nullptr;
 SetModeFn g_real_set_sharing = nullptr;
+SetModeFn g_real_set_capture = nullptr;
 OpenFn g_real_open = nullptr;
 
 GetFn g_get_perf = nullptr;
@@ -85,10 +88,17 @@ void hook_set_sharing(void *b, int32_t mode) {
   g_real_set_sharing(b, want);
 }
 
+void hook_set_capture(void *b, int32_t policy) {
+  int32_t want = g_forced_perf ? kCaptureAll : policy;
+  LOGI("setAllowedCapturePolicy(%d) -> %d", policy, want);
+  g_real_set_capture(b, want);
+}
+
 int32_t hook_open(void *b, void **stream) {
   if (g_forced_perf) {
     g_real_set_perf(b, g_forced_perf);
     g_real_set_sharing(b, kSharingShared);
+    if (g_real_set_capture) g_real_set_capture(b, kCaptureAll);
   }
   int32_t rc = g_real_open(b, stream);
   if (rc != 0 && g_forced_perf) {
@@ -279,6 +289,11 @@ bool install_hooks(const char *libname) {
   ok = ok && redirect(lib, h, "AAudioStreamBuilder_openStream",
                       reinterpret_cast<void *>(&hook_open),
                       reinterpret_cast<void **>(&g_real_open));
+  // Optional (API 29+): don't fail the whole install if it is missing.
+  if (!redirect(lib, h, "AAudioStreamBuilder_setAllowedCapturePolicy",
+                reinterpret_cast<void *>(&hook_set_capture),
+                reinterpret_cast<void **>(&g_real_set_capture)))
+    g_real_set_capture = nullptr;
   return ok;
 }
 
@@ -317,7 +332,7 @@ class Module : public zygisk::ModuleBase {
       return;
     }
     read_mode(api_->getModuleDir());
-    LOGI("v0.3 loaded into Spotify, forced performance mode = %d", g_forced_perf);
+    LOGI("v0.4 loaded into Spotify, forced performance mode = %d", g_forced_perf);
     if (install_hooks(AAUDIO_LIB_NAME))
       LOGI("hooks installed");
     else
